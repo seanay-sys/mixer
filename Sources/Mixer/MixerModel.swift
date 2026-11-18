@@ -8,8 +8,11 @@ struct AppSetting: Codable, Equatable {
     /// 0…2, where 1 is the app's normal level and above 1 is boost.
     var volume: Double = 1
     var muted = false
-    /// nil follows the system output device.
+    /// nil follows the system output device; `AppSetting.airPlay` means Mixer's AirPlay destination.
     var deviceUID: String?
+
+    static let airPlay = "mixer.airplay"
+    var usesAirPlay: Bool { deviceUID == Self.airPlay }
 
     var isDefault: Bool { self == AppSetting() }
 }
@@ -238,12 +241,14 @@ final class MixerModel: ObservableObject {
             tearDown(id)
             return
         }
-        let routedElsewhere = targetUID != devices.defaultUID
+        let toAirPlay = setting.usesAirPlay
+        let routedElsewhere = toAirPlay || targetUID != devices.defaultUID
         let needed = app.hasAudio && (setting.muted || abs(setting.volume - 1) > 0.001 || routedElsewhere)
         let gain = gain(for: setting)
 
         if let existing = taps[id] {
             let matches = existing.processObjectIDs == app.processObjectIDs && existing.outputUID == targetUID
+                && existing.toAirPlay == toAirPlay
             if matches {
                 existing.setGain(needed ? gain : 1)
                 if needed {
@@ -259,7 +264,8 @@ final class MixerModel: ObservableObject {
 
         guard needed else { return }
         do {
-            taps[id] = try ProcessTap(processObjectIDs: app.processObjectIDs, outputUID: targetUID, gain: gain)
+            taps[id] = try ProcessTap(
+                processObjectIDs: app.processObjectIDs, outputUID: targetUID, toAirPlay: toAirPlay, gain: gain)
             if problem?.hasPrefix("Couldn't") == true { problem = nil }
         } catch {
             problem = "Couldn't control \(app.name): \(error)"

@@ -7,11 +7,20 @@ final class TapState {
     var currentGain: Float
     /// Set by the audio thread once any non-silent sample arrives.
     var receivedSignal = false
+    /// When set, audio goes to AirPlay instead of the output device.
+    var airPlaySink: AirPlaySink?
+    /// Preallocated interleaving buffer for the AirPlay path (frames * 2 channels).
+    let scratchFrames = 16384
+    let scratch: UnsafeMutablePointer<Float>
 
     init(gain: Float) {
         targetGain = gain
         currentGain = gain
+        scratch = .allocate(capacity: scratchFrames * 2)
+        scratch.initialize(repeating: 0, count: scratchFrames * 2)
     }
+
+    deinit { scratch.deallocate() }
 }
 
 /// Captures the audio of a group of processes (silencing their normal output),
@@ -19,6 +28,7 @@ final class TapState {
 final class ProcessTap {
     let processObjectIDs: [AudioObjectID]
     let outputUID: String
+    let toAirPlay: Bool
     let createdAt = Date()
 
     private let state: TapState
@@ -29,9 +39,12 @@ final class ProcessTap {
 
     var receivedSignal: Bool { state.receivedSignal }
 
-    init(processObjectIDs: [AudioObjectID], outputUID: String, gain: Float) throws {
+    /// - Parameter toAirPlay: send the audio to Mixer's AirPlay destination; `outputUID`
+    ///   then only provides the clock and stays silent.
+    init(processObjectIDs: [AudioObjectID], outputUID: String, toAirPlay: Bool = false, gain: Float) throws {
         self.processObjectIDs = processObjectIDs
         self.outputUID = outputUID
+        self.toAirPlay = toAirPlay
         self.state = TapState(gain: gain)
         do {
             try start()
@@ -79,6 +92,12 @@ final class ProcessTap {
         ]
         try check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID), "Creating the output device")
 
+        if toAirPlay {
+            let rate = (try? aggregateID.get(propertyAddress(kAudioDevicePropertyNominalSampleRate), initial: Float64(0)))
+                ?? format.mSampleRate
+            state.airPlaySink = try AirPlaySink(sampleRate: rate > 0 ? rate : format.mSampleRate)
+        }
+
         let state = self.state
         try check(AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, nil) { _, input, _, output, _ in
             TapRenderer.render(input: input, output: output, state: state)
@@ -100,6 +119,8 @@ final class ProcessTap {
         if tapID != .unknown {
             AudioHardwareDestroyProcessTap(tapID)
         }
+        state.airPlaySink?.stop()
+        state.airPlaySink = nil
         ioProcID = nil
         aggregateID = .unknown
         tapID = .unknown
@@ -122,6 +143,34 @@ enum TapRenderer {
         let startGain = state.currentGain
         let endGain = state.targetGain
         let limit = max(startGain, endGain) > 1.0001
+
+        if let sink = state.airPlaySink {
+            for buffer in outputs {
+                if let raw = buffer.mData { memset(raw, 0, Int(buffer.mDataByteSize)) }
+            }
+            guard inputChannels > 0,
+                  let left = channelPointer(inputs, 0),
+                  let right = channelPointer(inputs, min(1, inputChannels - 1))
+            else { return }
+            let count = min(left.frames, right.frames, state.scratchFrames)
+            guard count > 0 else { return }
+            let step = (endGain - startGain) / Float(count)
+            var gain = startGain
+            var sawSignal = false
+            let out = state.scratch
+            for frame in 0..<count {
+                gain += step
+                let l = left.pointer[frame * left.stride]
+                let r = right.pointer[frame * right.stride]
+                if l != 0 || r != 0 { sawSignal = true }
+                out[frame * 2] = limit ? softClip(l * gain) : l * gain
+                out[frame * 2 + 1] = limit ? softClip(r * gain) : r * gain
+            }
+            if sawSignal { state.receivedSignal = true }
+            sink.ring.write(out, frames: count)
+            state.currentGain = endGain
+            return
+        }
 
         var outputChannel = 0
         for buffer in outputs {

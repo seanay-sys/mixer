@@ -6,6 +6,7 @@ A menu bar app for per-app volume on macOS (14.4 or later).
 - Remembers each app's level, mute and output and restores them when the app is reopened
 - Master volume and mute for the current output device
 - Pick the system output device, or send a single app to a different device (⋯ menu on its row)
+- Per-app AirPlay: choose an AirPlay speaker or TV with the AirPlay button in the panel's header, then set any app to **AirPlay** in its ⋯ menu. That app plays on the AirPlay device while everything else stays on the Mac
 - "Open at login" checkbox
 
 ## Install from the DMG
@@ -44,6 +45,8 @@ An app at 100%, unmuted and on the system output is left completely alone. When 
 When you quit Mixer, every tap is removed and all apps return to their normal output.
 
 ## Notes
+
+- AirPlay: one AirPlay destination at a time, chosen with Mixer's AirPlay button. AirPlay adds about 1–2 seconds of delay, so a video's sound on the TV lags its picture.
 
 - The app has an ad-hoc signature (no developer certificate). After each rebuild macOS may ask for the audio permission again.
 - The slider follows a perceptual curve, so 50% sounds about half as loud.

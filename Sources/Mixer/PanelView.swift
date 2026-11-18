@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 struct PanelView: View {
@@ -78,6 +79,10 @@ struct PanelView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Output device")
+
+            AirPlayButton()
+                .frame(width: 22, height: 18)
+                .help("AirPlay device for apps set to \"AirPlay\" in their ⋯ menu")
         }
     }
 
@@ -175,7 +180,12 @@ private struct AppRow: View {
                             .symbolEffect(.variableColor.iterative, options: .repeating)
                             .help("Playing audio")
                     }
-                    if let routed {
+                    if setting.usesAirPlay {
+                        Image(systemName: "airplayaudio")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.accentColor)
+                            .help("Playing on Mixer's AirPlay device")
+                    } else if let routed {
                         Image(systemName: routed.symbol)
                             .font(.system(size: 9))
                             .foregroundStyle(Color.accentColor)
@@ -238,6 +248,7 @@ private struct AppRow: View {
                 ForEach(devices.devices) { device in
                     Text(device.name).tag(device.uid)
                 }
+                Label("AirPlay", systemImage: "airplayaudio").tag(AppSetting.airPlay)
             }
             .pickerStyle(.inline)
             Divider()
@@ -254,6 +265,18 @@ private struct AppRow: View {
 }
 
 // MARK: - Components
+
+/// The AirPlay picker. It sets where Mixer's own playback goes, so apps set to
+/// "AirPlay" play on the chosen device while everything else stays on the Mac.
+private struct AirPlayButton: NSViewRepresentable {
+    func makeNSView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.isRoutePickerButtonBordered = false
+        return picker
+    }
+
+    func updateNSView(_ view: AVRoutePickerView, context: Context) {}
+}
 
 private final class HoverState: ObservableObject {
     @Published var isHovering = false
