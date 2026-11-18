@@ -24,7 +24,7 @@ final class AudioRingBuffer {
 
     /// Called from the real-time thread. Drops the oldest audio if the reader falls behind.
     func write(_ source: UnsafePointer<Float>, frames: Int) {
-        lock.withLock {
+        lock.withLockUnchecked {
             for frame in 0..<frames {
                 storage[writeIndex * 2] = source[frame * 2]
                 storage[writeIndex * 2 + 1] = source[frame * 2 + 1]
@@ -40,7 +40,7 @@ final class AudioRingBuffer {
 
     /// Copies up to `frames` frames into `destination`; returns how many were copied.
     func read(into destination: UnsafeMutablePointer<Float>?, frames: Int) -> Int {
-        lock.withLock {
+        lock.withLockUnchecked {
             let n = min(frames, count)
             for frame in 0..<n {
                 if let destination {

@@ -34,8 +34,6 @@ final class DeviceModel: ObservableObject {
     private let systemListeners = PropertyListenerBag()
     private let deviceListeners = PropertyListenerBag()
 
-    private let volumeAddress = propertyAddress(
-        kAudioHardwareServiceDeviceProperty_VirtualMainVolume, kAudioDevicePropertyScopeOutput)
     private let muteAddress = propertyAddress(kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput)
 
     init() {
@@ -116,7 +114,6 @@ final class DeviceModel: ObservableObject {
         deviceListeners.removeAll()
         guard let id = defaultDevice?.id else { return }
         let reload: () -> Void = { [weak self] in self?.reloadVolume() }
-        deviceListeners.add(id, volumeAddress, handler: reload)
         deviceListeners.add(id, muteAddress, handler: reload)
         deviceListeners.add(id, propertyAddress(kAudioDevicePropertyDataSource, kAudioDevicePropertyScopeOutput)) {
             [weak self] in self?.reloadDevices()
@@ -127,22 +124,37 @@ final class DeviceModel: ObservableObject {
         }
     }
 
+    /// The volume controls to use: the device's main control if it has one,
+    /// otherwise its preferred stereo channels (usually 1 and 2).
+    private func volumeElements(of id: AudioObjectID) -> [AudioObjectPropertyElement] {
+        let main = propertyAddress(kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyScopeOutput)
+        if id.has(main) { return [kAudioObjectPropertyElementMain] }
+        let stereo = (try? id.getArray(
+            propertyAddress(kAudioDevicePropertyPreferredChannelsForStereo, kAudioDevicePropertyScopeOutput),
+            initial: UInt32(0))) ?? [1, 2]
+        return stereo.filter {
+            id.has(propertyAddress(kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyScopeOutput, $0))
+        }
+    }
+
     func reloadVolume() {
         guard let id = defaultDevice?.id else {
             canSetVolume = false
             canMute = false
             return
         }
-        var address = volumeAddress
-        var value: Float32 = 0
-        var size = UInt32(MemoryLayout<Float32>.size)
-        let hasVolume = AudioHardwareServiceHasProperty(id, &address)
-        if hasVolume, AudioHardwareServiceGetPropertyData(id, &address, 0, nil, &size, &value) == noErr {
+        let elements = volumeElements(of: id)
+        let values = elements.compactMap {
+            try? id.get(propertyAddress(kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyScopeOutput, $0),
+                        initial: Float32(0))
+        }
+        if !values.isEmpty {
+            let value = values.reduce(0, +) / Float32(values.count)
             if abs(value - volume) > 0.0001 { volume = value }
         }
-        var settable: DarwinBoolean = false
-        canSetVolume = hasVolume
-            && AudioHardwareServiceIsPropertySettable(id, &address, &settable) == noErr && settable.boolValue
+        canSetVolume = elements.contains {
+            id.isSettable(propertyAddress(kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyScopeOutput, $0))
+        }
 
         canMute = id.has(muteAddress) && id.isSettable(muteAddress)
         let muted = ((try? id.get(muteAddress, initial: UInt32(0))) ?? 0) != 0
@@ -151,9 +163,11 @@ final class DeviceModel: ObservableObject {
 
     func setVolume(_ newValue: Float) {
         guard let id = defaultDevice?.id else { return }
-        var address = volumeAddress
-        var value = Float32(min(max(newValue, 0), 1))
-        AudioHardwareServiceSetPropertyData(id, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &value)
+        let value = Float32(min(max(newValue, 0), 1))
+        for element in volumeElements(of: id) {
+            try? id.set(propertyAddress(kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyScopeOutput, element),
+                        value: value)
+        }
         volume = value
         if isMuted, value > 0 { setMuted(false) }
     }

@@ -39,7 +39,10 @@ extension AudioObjectID {
         var address = address
         var value = initial
         var size = UInt32(MemoryLayout<T>.size)
-        try check(AudioObjectGetPropertyData(self, &address, 0, nil, &size, &value), "Read property \(address.mSelector)")
+        let status = withUnsafeMutableBytes(of: &value) { bytes in
+            AudioObjectGetPropertyData(self, &address, 0, nil, &size, bytes.baseAddress!)
+        }
+        try check(status, "Read property \(address.mSelector)")
         return value
     }
 
@@ -66,8 +69,10 @@ extension AudioObjectID {
 
     func set<T>(_ address: AudioObjectPropertyAddress, value: T) throws {
         var address = address
-        var value = value
-        try check(AudioObjectSetPropertyData(self, &address, 0, nil, UInt32(MemoryLayout<T>.size), &value), "Write \(address.mSelector)")
+        let status = withUnsafeBytes(of: value) { bytes in
+            AudioObjectSetPropertyData(self, &address, 0, nil, UInt32(bytes.count), bytes.baseAddress!)
+        }
+        try check(status, "Write \(address.mSelector)")
     }
 }
 

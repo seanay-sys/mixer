@@ -6,7 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-swift build -c release
+# The Command Line Tools linker warns about two search paths that only exist in full Xcode; hide just those lines.
+swift build -c release 2>&1 | grep -v "ld: warning: search path '/Library/Developer/CommandLineTools/Developer"
 BIN="$(swift build -c release --show-bin-path)/Mixer"
 
 APP=build/Mixer.app
