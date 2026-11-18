@@ -1,5 +1,7 @@
 # Mixer
 
+[![Support me on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Mixer-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/seanay-sys)
+
 A menu bar app for per-app volume on macOS (14.4 or later).
 
 - Volume slider and mute for every running app, from 0% to 200% (above 100% is boost, shown in orange)
@@ -51,6 +53,10 @@ When you quit Mixer, every tap is removed and all apps return to their normal ou
 - The app has an ad-hoc signature (no developer certificate). After each rebuild macOS may ask for the audio permission again.
 - The slider follows a perceptual curve, so 50% sounds about half as loud.
 - Apps that haven't opened audio yet are shown dimmed. Any setting you give them takes effect as soon as they play sound.
+
+## Support
+
+Mixer is free. If it's useful to you, you can buy me a coffee on [Ko-fi](https://ko-fi.com/seanay-sys).
 
 ## License
 
