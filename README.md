@@ -48,3 +48,7 @@ When you quit Mixer, every tap is removed and all apps return to their normal ou
 - The app has an ad-hoc signature (no developer certificate). After each rebuild macOS may ask for the audio permission again.
 - The slider follows a perceptual curve, so 50% sounds about half as loud.
 - Apps that haven't opened audio yet are shown dimmed. Any setting you give them takes effect as soon as they play sound.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
